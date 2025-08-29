@@ -3,64 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>드로잉 기분 분석기</title>
+<title>드로잉 기분 분석기 완전판</title>
 <style>
-  body {
-    font-family: 'Segoe UI', sans-serif;
-    background: #f0f4f8;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    min-height: 100vh;
-    margin: 0;
-    padding: 20px;
-  }
-
-  h1 {
-    color: #333;
-    text-align: center;
-  }
-
-  canvas {
-    border: 2px solid #333;
-    border-radius: 10px;
-    background: #fff;
-    cursor: crosshair;
-    margin-bottom: 15px;
-  }
-
-  .controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-
-  button {
-    padding: 8px 15px;
-    border: none;
-    border-radius: 6px;
-    background: #4a90e2;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  button:hover {
-    background: #357ABD;
-  }
-
-  #moodResult {
-    font-size: 18px;
-    color: #333;
-    text-align: center;
-    min-height: 24px;
-  }
+body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; display:flex; flex-direction:column; align-items:center; padding:20px; margin:0; }
+h1 { color:#333; text-align:center; }
+canvas { border:2px solid #333; border-radius:10px; background:#fff; cursor:crosshair; margin-bottom:15px; }
+.controls { display:flex; gap:10px; margin-bottom:20px; }
+button { padding:8px 15px; border:none; border-radius:6px; background:#4a90e2; color:white; font-size:14px; cursor:pointer; }
+button:hover { background:#357ABD; }
+#moodResult { font-size:18px; color:#333; text-align:center; min-height:24px; }
 </style>
 </head>
 <body>
 
-<h1>🎨 드로잉 기분 분석기</h1>
+<h1>🎨 드로잉 기분 분석기 완전판</h1>
 <canvas id="drawCanvas" width="400" height="400"></canvas>
 
 <div class="controls">
@@ -74,69 +30,125 @@
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 let drawing = false;
+let lastX=0, lastY=0;
+
+// 기본 선
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
+ctx.strokeStyle = '#ff6f61';
 
 // 그리기 이벤트
-canvas.addEventListener('mousedown', () => drawing = true);
-canvas.addEventListener('mouseup', () => drawing = false);
-canvas.addEventListener('mouseleave', () => drawing = false);
+function startDraw(x,y){
+  drawing=true;
+  lastX=x; lastY=y;
+  ctx.beginPath();
+  ctx.moveTo(lastX,lastY);
+}
 
-canvas.addEventListener('mousemove', (e) => {
-  if (!drawing) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  ctx.lineWidth = 5;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = '#ff6f61';
-  ctx.lineTo(x, y);
+function drawLine(x,y){
+  if(!drawing) return;
+  ctx.lineTo(x,y);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(x, y);
+  ctx.moveTo(x,y);
+}
+
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  startDraw(e.clientX-rect.left,e.clientY-rect.top);
+});
+canvas.addEventListener('mouseup', ()=>drawing=false);
+canvas.addEventListener('mouseleave', ()=>drawing=false);
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  drawLine(e.clientX-rect.left, e.clientY-rect.top);
 });
 
-// 지우기 버튼
-document.getElementById('clearBtn').addEventListener('click', () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  document.getElementById('moodResult').textContent = '';
+// 터치
+canvas.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  startDraw(e.touches[0].clientX-rect.left,e.touches[0].clientY-rect.top);
+});
+canvas.addEventListener('touchend', ()=>drawing=false);
+canvas.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  drawLine(e.touches[0].clientX-rect.left,e.touches[0].clientY-rect.top);
 });
 
-// 분석 버튼
-document.getElementById('analyzeBtn').addEventListener('click', () => {
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  let rTotal = 0, gTotal = 0, bTotal = 0, count = 0;
+// 지우기
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('moodResult').textContent='';
+});
 
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i+1];
-    const b = data[i+2];
-    const alpha = data[i+3];
-    if(alpha > 0) {
-      rTotal += r;
-      gTotal += g;
-      bTotal += b;
-      count++;
+// 분석
+document.getElementById('analyzeBtn').addEventListener('click', ()=>{
+  const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const data=imageData.data;
+  let rTotal=0,gTotal=0,bTotal=0,count=0;
+  let strokeCount=0;
+  let symbolScores={love:0,sad:0,hope:0,stress:0};
+  let faceScores={happy:0,sad:0,angry:0};
+
+  // 색상, 선 굵기, 심볼 분석
+  for(let i=0;i<data.length;i+=4){
+    const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
+    if(a>0){
+      rTotal+=r; gTotal+=g; bTotal+=b; count++;
+      if(r>200||g>200||b>200) strokeCount++;
+      // 하트 핑크
+      if(Math.abs(r-255)<50 && Math.abs(g-0)<50 && Math.abs(b-100)<50) symbolScores.love++;
+      // 눈물 파랑
+      if(Math.abs(r-0)<50 && Math.abs(g-150)<50 && Math.abs(b-255)<50) symbolScores.sad++;
+      // 별 노랑
+      if(Math.abs(r-255)<50 && Math.abs(g-255)<50 && Math.abs(b-0)<50) symbolScores.hope++;
+    }
+  }
+  if(count===0){document.getElementById('moodResult').textContent='그림을 먼저 그려주세요!';return;}
+  const rAvg=rTotal/count, gAvg=gTotal/count, bAvg=bTotal/count;
+  let moodScore=0;
+  if(rAvg>150) moodScore+=2;
+  if(gAvg>150) moodScore+=1;
+  if(bAvg>150) moodScore-=1;
+  const thicknessScore=strokeCount/count;
+  if(thicknessScore>0.05) moodScore+=1;
+
+  // 얼굴 표정 단순 분석 (픽셀 중심부)
+  // 중앙 영역 검사
+  const midStart = canvas.width/4*3*4*canvas.width/4; // 단순히 중심 100x100
+  for(let i=midStart;i<midStart+100*100*4;i+=4){
+    const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
+    if(a>0){
+      // 빨강 중심 웃음 추정
+      if(r>180 && g<120 && b<120) faceScores.happy++;
+      // 파랑 중심 눈물 추정
+      if(b>150 && r<120 && g<120) faceScores.sad++;
+      // 진한 검정 점 -> 찡그림
+      if(r<50 && g<50 && b<50) faceScores.angry++;
     }
   }
 
-  if(count === 0){
-    document.getElementById('moodResult').textContent = '그림을 먼저 그려주세요!';
-    return;
-  }
+  // 30가지 메시지 배열
+  const messages=[
+    "오늘은 활기차고 열정적인 하루!", "조용하지만 안정된 기분이에요.", "사랑과 행복이 느껴지는 날이에요 ❤️",
+    "조금 우울하지만 차분한 하루네요 😢", "기대와 희망이 가득한 날이에요 🌟", "긴장되지만 흥미로운 하루예요",
+    "차분하고 사색적인 느낌이에요", "오늘은 즐거움과 사랑이 함께해요", "행복하지만 조금 피곤한 느낌이에요",
+    "열정과 모험심이 가득한 날이에요!", "조용하고 편안한 기분이에요", "사랑과 기쁨이 넘쳐요",
+    "조금 슬프지만 희망을 느껴요", "흥분되고 설레는 하루!", "평화롭고 안정된 느낌이에요",
+    "마음이 복잡하지만 재미있는 하루예요", "행복과 만족이 함께하는 날", "긴장되지만 도전적인 하루!",
+    "차분하지만 조금 지친 기분이에요", "사랑과 열정이 가득한 하루 ❤️", "조금 우울하지만 차분하게",
+    "즐겁고 활기찬 하루!", "기쁨과 기대가 섞인 날 🌟", "오늘은 마음이 편안해요",
+    "흥미진진하고 재미있는 하루", "사랑과 행복이 함께하는 날", "조금 불안하지만 즐거운 기분",
+    "차분하지만 행복이 느껴지는 하루", "활기차고 모험적인 하루!", "평화롭고 안정된 기분이에요"
+  ];
 
-  const rAvg = rTotal / count;
-  const gAvg = gTotal / count;
-  const bAvg = bTotal / count;
+  // 점수 기반 메시지 선택
+  let totalScore = moodScore + symbolScores.love + symbolScores.sad + symbolScores.hope + faceScores.happy + faceScores.sad + faceScores.angry;
+  let msgIndex = totalScore % messages.length;
 
-  let mood = '';
-  if(rAvg > 150 && gAvg < 120 && bAvg < 120) mood = '열정적이고 활기찬 기분이에요!';
-  else if(rAvg < 120 && gAvg > 150 && bAvg < 120) mood = '평화롭고 안정된 기분이에요!';
-  else if(rAvg < 120 && gAvg < 120 && bAvg > 150) mood = '조용하고 사색적인 기분이에요!';
-  else if(rAvg > 180 && gAvg > 180 && bAvg < 120) mood = '즐겁고 행복한 기분이에요!';
-  else mood = '오늘의 기분은 복합적이에요. 여러 감정이 섞여 있어요.';
-
-  document.getElementById('moodResult').textContent = mood;
+  document.getElementById('moodResult').textContent = messages[msgIndex];
 });
 </script>
 
